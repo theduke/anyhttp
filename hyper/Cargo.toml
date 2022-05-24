@@ -1,0 +1,26 @@
+[package]
+name = "anyhttp_hyper"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[features]
+# sync = ["anyhttp/sync"]
+tcp = ["hyper/tcp"]
+http1 = ["hyper/http1"]
+http2 = ["hyper/http2"]
+
+default = ["http1", "http2", "tcp"]
+
+[dependencies]
+anyhttp = { version = "0.1.0", path = "../", default-features = false, features = ["async"]}
+futures-util = "0.3.21"
+http = "0.2.7"
+hyper = { version = "0.14.18", features = ["client",  "http1", "stream"] }
+pin-project-lite = "0.2.9"
+
+[dev-dependencies]
+tokio = { version = "1.18.2", features = ["macros", "rt"] }
+anyhttp = { version = "0.1.0", path = "../", default-features = false, features = ["test", "json",
+"sync", "async", "base64"] }

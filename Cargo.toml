@@ -1,0 +1,39 @@
+[package]
+name = "anyhttp"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[features]
+test = ["tiny_http"]
+sync = []
+async = ["futures"]
+cookies = ["cookie", "cookie_store", "url"]
+
+json = ["serde", "serde_json"]
+urlencoding = ["serde_urlencoded"]
+
+default = ["json", "urlencoding", "base64", "cookies", "sync", "async"]
+
+[dependencies]
+base64 = { version = "0.13.0", optional = true }
+futures = { version = "0.3.21", optional = true}
+http = "0.2.7"
+serde = { version = "1.0.137", optional = true }
+serde_json = { version = "1.0.81", optional = true }
+serde_urlencoded = { version = "0.7.1", optional = true }
+cookie = { version = "0.16.0", optional = true }
+cookie_store = { version = "0.16.0", optional = true }
+
+tiny_http = { version = "0.11.0", optional = true}
+url = { version = "2.2.2", optional = true }
+
+[workspace]
+members = [
+    "./hyper",
+]
+
+[dev-dependencies]
+serde_json = "1.0.81"
+tiny_http = "0.11.0"
