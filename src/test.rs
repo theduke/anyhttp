@@ -64,3 +64,21 @@ where
 
     server.unblock();
 }
+
+pub fn test_sync_executor<E>(exec: E)
+where
+    E: HttpExecutor<Output = Result<crate::Response<crate::sync::GenericResponseBody>, HttpError>>,
+{
+    let server = start_test_server();
+
+    let client = crate::Client::new(exec);
+
+    let url = format!("http://{TEST_URL}/");
+
+    let res = client.get(&url).send().unwrap().error_for_status().unwrap();
+    assert_eq!(res.uri().to_string(), url);
+
+    res.json_sync::<serde_json::Value>().unwrap();
+
+    server.unblock();
+}
