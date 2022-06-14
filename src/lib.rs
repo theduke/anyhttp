@@ -140,6 +140,16 @@ where
         }))
     }
 
+    /// Unwrap the executor.
+    ///
+    /// **WARNING**: only works when this client has never been cloned.
+    pub fn try_into_executor(self) -> Result<E, Self> {
+        match Arc::try_unwrap(self.0) {
+            Ok(e) => Ok(e.exec),
+            Err(inner) => Err(Client(inner)),
+        }
+    }
+
     pub fn executor_cloned(&self) -> E
     where
         E: Clone,
