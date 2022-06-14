@@ -52,25 +52,59 @@ impl Respond for GenericResponseBody {
     }
 }
 
+struct DynRespondWrapper<R>(R);
+
+type DynChunks = Box<dyn Iterator<Item = Result<Vec<u8>, HttpError>>>;
+type DynReader = Box<dyn std::io::Read>;
+
+impl<R> Respond for DynRespondWrapper<R>
+where
+    R: Respond<BytesOutput = Result<Vec<u8>, HttpError>>,
+    R::Chunks: Iterator<Item = Result<Vec<u8>, HttpError>> + 'static,
+    R::Reader: std::io::Read + 'static,
+{
+    type Chunks = DynChunks;
+    type BytesOutput = Result<Vec<u8>, HttpError>;
+    type Reader = DynReader;
+
+    fn into_chunks(self) -> Self::Chunks {
+        Box::new(self.0.into_chunks())
+    }
+
+    fn into_chunks_boxed(self: Box<Self>) -> Self::Chunks {
+        (*self).into_chunks()
+    }
+
+    fn bytes(self) -> Self::BytesOutput {
+        self.0.bytes()
+    }
+
+    fn bytes_boxed(self: Box<Self>) -> Self::BytesOutput {
+        (*self).0.bytes()
+    }
+
+    fn reader(self) -> Self::Reader {
+        Box::new(self.0.reader())
+    }
+
+    fn reader_boxed(self: Box<Self>) -> Self::Reader {
+        (*self).reader()
+    }
+}
+
 struct DynWrapper<E>(E);
 
 pub type DynResponseBody = Box<
-    dyn Respond<
-        Chunks = Result<Vec<u8>, HttpError>,
-        BytesOutput = Result<Vec<u8>, HttpError>,
-        Reader = Box<dyn std::io::Read>,
-    >,
+    dyn Respond<Chunks = DynChunks, BytesOutput = Result<Vec<u8>, HttpError>, Reader = DynReader>,
 >;
 
 impl<E> HttpExecutor for DynWrapper<E>
 where
     E: HttpExecutor,
     E::Output: Into<Result<Response<E::ResponseBody>, HttpError>>,
-    E::ResponseBody: Respond<
-        Chunks = Result<Vec<u8>, HttpError>,
-        BytesOutput = Result<Vec<u8>, HttpError>,
-        Reader = Box<dyn std::io::Read>,
-    >,
+    E::ResponseBody: Respond<BytesOutput = Result<Vec<u8>, HttpError>>,
+    <E::ResponseBody as Respond>::Chunks: Iterator<Item = Result<Vec<u8>, HttpError>> + 'static,
+    <E::ResponseBody as Respond>::Reader: std::io::Read + 'static,
 {
     type RequestBody = RequestBody;
     type ResponseBody = DynResponseBody;
@@ -86,7 +120,7 @@ where
 
     fn execute(&self, request: RequestPre<Self::RequestBody>) -> Self::Output {
         let res = self.0.execute_generic(request).into()?;
-        let res = res.map_body(move |b| -> DynResponseBody { Box::new(b) });
+        let res = res.map_body(move |b| -> DynResponseBody { Box::new(DynRespondWrapper(b)) });
         Ok(res)
     }
 
@@ -108,12 +142,10 @@ pub type DynClient = super::Client<DynExecutor>;
 impl<E> super::Client<E>
 where
     E: HttpExecutor + 'static,
-    E::ResponseBody: Respond<
-        Chunks = Result<Vec<u8>, HttpError>,
-        BytesOutput = Result<Vec<u8>, HttpError>,
-        Reader = Box<dyn std::io::Read>,
-    >,
+    E::ResponseBody: Respond<BytesOutput = Result<Vec<u8>, HttpError>>,
     E::Output: Into<Result<Response<E::ResponseBody>, HttpError>>,
+    <E::ResponseBody as Respond>::Chunks: Iterator<Item = Result<Vec<u8>, HttpError>> + 'static,
+    <E::ResponseBody as Respond>::Reader: std::io::Read + 'static,
 {
     pub fn new_dyn_sync(exec: E) -> super::Client<DynExecutor> {
         let dyn_exec: DynExecutor = Arc::new(DynWrapper(exec));
