@@ -140,6 +140,13 @@ where
         }))
     }
 
+    pub fn executor_cloned(&self) -> E
+    where
+        E: Clone,
+    {
+        self.0.exec.clone()
+    }
+
     #[cfg(feature = "cookies")]
     pub fn new_with_cookie_jar(exec: E) -> Self {
         let jar = Arc::new(std::sync::RwLock::new(cookie_store::CookieStore::default()));
