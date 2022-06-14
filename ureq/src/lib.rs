@@ -57,6 +57,7 @@ impl HttpExecutor for UreqExecutor {
 
         let ures = match result {
             Ok(r) => r,
+            Err(ureq::Error::Status(_status, res)) => res,
             Err(err) => {
                 // FIXME: better mapping
                 return Err(HttpError::new_custom(err.to_string()));
