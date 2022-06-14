@@ -36,6 +36,28 @@ pub trait Respond: 'static {
     fn bytes_boxed(self: Box<Self>) -> Self::BytesOutput;
 }
 
+impl<R: Respond + ?Sized> Respond for Box<R> {
+    type Chunks = R::Chunks;
+
+    type BytesOutput = R::BytesOutput;
+
+    fn into_chunks(self) -> Self::Chunks {
+        self.into_chunks_boxed()
+    }
+
+    fn into_chunks_boxed(self: Box<Self>) -> Self::Chunks {
+        R::into_chunks_boxed(*self)
+    }
+
+    fn bytes(self) -> Self::BytesOutput {
+        self.bytes_boxed()
+    }
+
+    fn bytes_boxed(self: Box<Self>) -> Self::BytesOutput {
+        R::bytes_boxed(*self)
+    }
+}
+
 pub type Tapper = Arc<dyn Fn(&mut Response<()>) + Send + Sync>;
 
 pub trait HttpExecutor {
