@@ -82,15 +82,14 @@ impl std::future::Future for ResponseFuture {
                 Poll::Ready(res) => {
                     let res = res
                         .map(|res| {
-                            let (parts, body) = res.into_parts();
-                            let res = anyhttp::Response::from_parts(parts, ResponseBody(body));
+                            let res = anyhttp::Response::from(res).map_body(ResponseBody);
                             let (mut res, body) = res.take_body();
-                            *res.uri_mut() = uri.clone();
+                            res.uri = Some(uri.clone());
                             if let Some(f) = tap.take() {
                                 f(&mut res);
                             }
 
-                            res.map(move |_| body)
+                            res.map_body(move |_| body)
                         })
                         .map_err(|err| {
                             // FIXME: proper error mapping
@@ -136,7 +135,7 @@ where
     }
 
     fn execute(&self, pre: anyhttp::RequestPre<Self::RequestBody>) -> Self::Output {
-        let uri = pre.request.uri().clone();
+        let uri = pre.request.uri.clone();
         let fut = self.client.request(pre.request.into());
         ResponseFuture::Hyper {
             fut,

@@ -1,6 +1,6 @@
 use http::{header::HeaderName, HeaderValue, Method, Uri};
 
-use crate::{Client, HttpError, HttpExecutor, RequestBody, RequestPre};
+use crate::{Client, HttpError, HttpExecutor, Request, RequestBody, RequestPre};
 
 pub struct RequestBuilder<E: HttpExecutor> {
     client: Client<E>,
@@ -11,7 +11,7 @@ impl<E: HttpExecutor + Sized> RequestBuilder<E> {
     pub fn new(client: Client<E>) -> Self {
         let body = client.0.exec.request_body_from_generic(RequestBody::Empty);
         let pre = RequestPre {
-            request: http::Request::new(body),
+            request: Request::new(body),
             timeout: None,
             tap: None,
         };
@@ -23,7 +23,7 @@ impl<E: HttpExecutor + Sized> RequestBuilder<E> {
 
     pub fn version(mut self, version: http::Version) -> Self {
         self.result = self.result.and_then(|mut pre| {
-            *pre.request.version_mut() = version;
+            pre.request.version = version;
             Ok(pre)
         });
         self
@@ -37,7 +37,7 @@ impl<E: HttpExecutor + Sized> RequestBuilder<E> {
         self.result = self.result.and_then(move |mut r| {
             let method = Method::try_from(method)
                 .map_err(|err| HttpError::new_invalid_request(err.into(), None))?;
-            *r.request.method_mut() = method;
+            r.request.method = method;
             Ok(r)
         });
         self
@@ -51,14 +51,14 @@ impl<E: HttpExecutor + Sized> RequestBuilder<E> {
         self.result = self.result.and_then(move |mut r| {
             let uri = Uri::try_from(uri)
                 .map_err(|err| HttpError::new_invalid_request(err.into(), None))?;
-            *r.request.uri_mut() = uri;
+            r.request.uri = uri;
             Ok(r)
         });
         self
     }
 
     pub fn uri_mut(&mut self) -> Option<&mut Uri> {
-        self.result.as_mut().ok().map(|p| p.request.uri_mut())
+        self.result.as_mut().ok().map(|p| &mut p.request.uri)
     }
 
     pub fn header_sensitive<K, V>(mut self, key: K, value: V, is_sensitive: bool) -> Self
@@ -74,7 +74,7 @@ impl<E: HttpExecutor + Sized> RequestBuilder<E> {
             let mut value = HeaderValue::try_from(value)
                 .map_err(|err| HttpError::new_invalid_request(err.into(), None))?;
             value.set_sensitive(is_sensitive);
-            r.request.headers_mut().append(key, value);
+            r.request.headers.append(key, value);
 
             Ok(r)
         });
@@ -93,7 +93,7 @@ impl<E: HttpExecutor + Sized> RequestBuilder<E> {
 
     pub fn headers(mut self, headers: http::HeaderMap) -> Self {
         self.result = self.result.and_then(|mut pre| {
-            pre.request.headers_mut().extend(headers);
+            pre.request.headers.extend(headers);
             Ok(pre)
         });
         self
@@ -137,7 +137,7 @@ impl<E: HttpExecutor + Sized> RequestBuilder<E> {
         self.result = self.result.and_then(move |mut r| {
             let body = E::RequestBody::try_from(body)
                 .map_err(|err| HttpError::new_invalid_request(err, None))?;
-            *r.request.body_mut() = body;
+            r.request.body = body;
             Ok(r)
         });
         self
@@ -159,9 +159,9 @@ impl<E: HttpExecutor + Sized> RequestBuilder<E> {
                 .exec
                 .request_body_from_generic(RequestBody::Bytes(raw_body));
 
-            *r.request.body_mut() = body;
+            r.request.body = body;
 
-            r.request.headers_mut().insert(
+            r.request.headers.insert(
                 http::header::CONTENT_TYPE,
                 HeaderValue::from_static("application/json"),
             );
@@ -187,8 +187,8 @@ impl<E: HttpExecutor + Sized> RequestBuilder<E> {
                         None,
                     )
                 })?;
-            *pre.request.body_mut() = body;
-            pre.request.headers_mut().insert(
+            pre.request.body = body;
+            pre.request.headers.insert(
                 http::header::CONTENT_TYPE,
                 HeaderValue::from_static("application/x-www-form-urlencoded"),
             );

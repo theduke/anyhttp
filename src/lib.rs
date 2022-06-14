@@ -13,10 +13,15 @@ mod async_impl;
 
 use std::sync::Arc;
 
+pub use http::{
+    header::{self, HeaderName, HeaderValue},
+    Extensions, Method, Uri, Version,
+};
+
 pub use self::{
     builder::RequestBuilder,
     error::HttpError,
-    types::{RequestBody, Response},
+    types::{Request, RequestBody, RequestPre, Response},
 };
 
 #[cfg(feature = "async")]
@@ -71,13 +76,7 @@ pub trait HttpExecutor {
     fn execute(&self, pre: RequestPre<Self::RequestBody>) -> Self::Output;
 
     fn execute_generic(&self, pre: RequestPre<RequestBody>) -> Self::Output {
-        let (parts, body) = pre.request.into_parts();
-        let body2 = self.request_body_from_generic(body);
-        let pre2 = RequestPre {
-            request: http::Request::from_parts(parts, body2),
-            timeout: pre.timeout,
-            tap: pre.tap,
-        };
+        let pre2 = pre.map_body(|b| self.request_body_from_generic(b));
         self.execute(pre2)
     }
 }
@@ -98,12 +97,6 @@ impl<E: HttpExecutor + ?Sized> HttpExecutor for Arc<E> {
     fn execute(&self, pre: RequestPre<Self::RequestBody>) -> Self::Output {
         E::execute(self, pre)
     }
-}
-
-pub struct RequestPre<Body> {
-    pub request: http::Request<Body>,
-    pub timeout: Option<std::time::Duration>,
-    pub tap: Option<Tapper>,
 }
 
 struct ClientInner<E> {
@@ -142,15 +135,17 @@ where
         let jar2 = jar.clone();
         let tap: Tapper = Arc::new(move |res: &mut Response<()>| {
             let mut store = jar.write().unwrap();
-            for header in res.headers().get_all(http::header::SET_COOKIE) {
+            for header in res.headers.get_all(header::SET_COOKIE) {
                 let opt = std::str::from_utf8(header.as_bytes())
-                    .map(|x| x.to_string())
-                    .map_err(cookie::ParseError::from)
-                    .and_then(cookie::Cookie::parse);
+                    .ok()
+                    .and_then(|v| v.parse::<cookie::Cookie>().ok());
 
-                let url = res.uri().to_string().parse::<url::Url>();
+                let url_opt = res
+                    .uri
+                    .as_ref()
+                    .and_then(|u| u.to_string().parse::<url::Url>().ok());
 
-                if let (Ok(cookie), Ok(url)) = (opt, url) {
+                if let (Some(cookie), Some(url)) = (opt, url_opt) {
                     store.store_response_cookies(Some(cookie).into_iter(), &url);
                 }
             }
@@ -162,7 +157,7 @@ where
         }))
     }
 
-    pub fn send(&self, request: http::Request<E::RequestBody>) -> E::Output {
+    pub fn send(&self, request: Request<E::RequestBody>) -> E::Output {
         self.send_pre(RequestPre {
             request,
             timeout: None,
@@ -170,17 +165,17 @@ where
         })
     }
 
-    fn map_request(&self, r: http::Request<E::RequestBody>) -> http::Request<E::RequestBody> {
+    fn map_request(&self, r: Request<E::RequestBody>) -> Request<E::RequestBody> {
         #[cfg(feature = "cookies")]
         let mut r = r;
         #[cfg(feature = "cookies")]
         {
             self.0.cookies.as_ref().and_then(|jar| {
-                if r.headers().contains_key(http::header::COOKIE) {
+                if r.headers.contains_key(header::COOKIE) {
                     return None;
                 }
 
-                let url = r.uri().to_string().parse::<url::Url>().ok()?;
+                let url = r.uri.to_string().parse::<url::Url>().ok()?;
                 let value = jar
                     .read()
                     .unwrap()
@@ -188,10 +183,10 @@ where
                     .map(|(name, value)| format!("{name}={value}"))
                     .collect::<Vec<_>>()
                     .join("; ")
-                    .parse::<http::HeaderValue>()
+                    .parse::<HeaderValue>()
                     .ok()?;
 
-                r.headers_mut().insert(http::header::COOKIE, value);
+                r.headers.insert(header::COOKIE, value);
 
                 Some(())
             });
@@ -207,59 +202,59 @@ where
 
     pub fn request<M, U>(&self, method: M, uri: U) -> RequestBuilder<E>
     where
-        http::Method: TryFrom<M>,
-        <http::Method as TryFrom<M>>::Error: Into<http::Error>,
-        http::Uri: TryFrom<U>,
-        <http::Uri as TryFrom<U>>::Error: Into<http::Error>,
+        Method: TryFrom<M>,
+        <Method as TryFrom<M>>::Error: Into<http::Error>,
+        Uri: TryFrom<U>,
+        <Uri as TryFrom<U>>::Error: Into<http::Error>,
     {
         RequestBuilder::new(self.clone()).method(method).uri(uri)
     }
 
     pub fn get<U>(&self, uri: U) -> RequestBuilder<E>
     where
-        http::Uri: TryFrom<U>,
-        <http::Uri as TryFrom<U>>::Error: Into<http::Error>,
+        Uri: TryFrom<U>,
+        <Uri as TryFrom<U>>::Error: Into<http::Error>,
     {
-        self.request(http::Method::GET, uri)
+        self.request(Method::GET, uri)
     }
 
     pub fn head<U>(&self, uri: U) -> RequestBuilder<E>
     where
-        http::Uri: TryFrom<U>,
-        <http::Uri as TryFrom<U>>::Error: Into<http::Error>,
+        Uri: TryFrom<U>,
+        <Uri as TryFrom<U>>::Error: Into<http::Error>,
     {
         self.request(http::Method::HEAD, uri)
     }
 
     pub fn patch<U>(&self, uri: U) -> RequestBuilder<E>
     where
-        http::Uri: TryFrom<U>,
-        <http::Uri as TryFrom<U>>::Error: Into<http::Error>,
+        Uri: TryFrom<U>,
+        <Uri as TryFrom<U>>::Error: Into<http::Error>,
     {
         self.request(http::Method::PATCH, uri)
     }
 
     pub fn post<U>(&self, uri: U) -> RequestBuilder<E>
     where
-        http::Uri: TryFrom<U>,
-        <http::Uri as TryFrom<U>>::Error: Into<http::Error>,
+        Uri: TryFrom<U>,
+        <Uri as TryFrom<U>>::Error: Into<http::Error>,
     {
-        self.request(http::Method::POST, uri)
+        self.request(Method::POST, uri)
     }
 
     pub fn put<U>(&self, uri: U) -> RequestBuilder<E>
     where
-        http::Uri: TryFrom<U>,
-        <http::Uri as TryFrom<U>>::Error: Into<http::Error>,
+        Uri: TryFrom<U>,
+        <Uri as TryFrom<U>>::Error: Into<http::Error>,
     {
-        self.request(http::Method::PUT, uri)
+        self.request(Method::PUT, uri)
     }
 
     pub fn delete<U>(&self, uri: U) -> RequestBuilder<E>
     where
-        http::Uri: TryFrom<U>,
-        <http::Uri as TryFrom<U>>::Error: Into<http::Error>,
+        Uri: TryFrom<U>,
+        <Uri as TryFrom<U>>::Error: Into<http::Error>,
     {
-        self.request(http::Method::DELETE, uri)
+        self.request(Method::DELETE, uri)
     }
 }

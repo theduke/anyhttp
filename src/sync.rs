@@ -19,10 +19,9 @@ impl Respond for GenericResponseBody {
             GenericResponseBody::Read(mut r) => {
                 let mut buf = Vec::new();
 
-                r.read_to_end(&mut buf).map_err(|err| HttpError::new_io(
-                    err,
-                    Some("could not read response body".to_string()),
-                ))?;
+                r.read_to_end(&mut buf).map_err(|err| {
+                    HttpError::new_io(err, Some("could not read response body".to_string()))
+                })?;
 
                 Ok(buf)
             }
@@ -68,7 +67,7 @@ where
 
     fn execute(&self, request: RequestPre<Self::RequestBody>) -> Self::Output {
         let res = self.0.execute_generic(request).into()?;
-        let res = res.map(move |b| -> DynResponseBody { Box::new(b) });
+        let res = res.map_body(move |b| -> DynResponseBody { Box::new(b) });
         Ok(res)
     }
 
@@ -105,7 +104,7 @@ where
     B: Respond<Chunks = Result<Vec<u8>, HttpError>, BytesOutput = Result<Vec<u8>, HttpError>>,
 {
     pub fn bytes_sync(self) -> Result<Vec<u8>, HttpError> {
-        self.into_body().bytes()
+        self.body.bytes()
     }
 
     #[cfg(feature = "json")]

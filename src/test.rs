@@ -51,9 +51,9 @@ where
         .unwrap()
         .error_for_status()
         .unwrap();
-    assert_eq!(res.uri().to_string(), url);
+    assert_eq!(res.uri.unwrap_or_default().to_string(), url);
 
-    let mut chunks = Box::pin(res.into_body().into_chunks());
+    let mut chunks = Box::pin(res.body.into_chunks());
     let mut all = Vec::new();
     while let Some(res) = chunks.next().await {
         all.extend(res.unwrap());
@@ -76,7 +76,7 @@ where
     let url = format!("http://{TEST_URL}/");
 
     let res = client.get(&url).send().unwrap().error_for_status().unwrap();
-    assert_eq!(res.uri().to_string(), url);
+    assert_eq!(res.uri.clone().unwrap_or_default().to_string(), url);
 
     res.json_sync::<serde_json::Value>().unwrap();
 

@@ -1,6 +1,7 @@
 use std::str::FromStr;
 
 use anyhttp::{sync::GenericResponseBody, HttpError, HttpExecutor};
+use http::HeaderValue;
 
 #[derive(Clone)]
 pub struct UreqExecutor {
@@ -30,14 +31,15 @@ impl HttpExecutor for UreqExecutor {
     }
 
     fn execute(&self, pre: anyhttp::RequestPre<Self::RequestBody>) -> Self::Output {
-        let (parts, body) = pre.request.into_parts();
+        let req = pre.request;
+        let tap = pre.tap;
 
         let mut ur = self
             .agent
-            .request(parts.method.as_str(), &parts.uri.to_string());
+            .request(req.method.as_str(), &req.uri.to_string());
 
-        for key in parts.headers.keys() {
-            for value in parts.headers.get_all(key) {
+        for key in req.headers.keys() {
+            for value in req.headers.get_all(key) {
                 let value_str = std::str::from_utf8(value.as_bytes()).map_err(|_err| {
                     HttpError::new_custom(
                         "could not re-parse request header '{key}': non-utf8 value",
@@ -47,37 +49,57 @@ impl HttpExecutor for UreqExecutor {
             }
         }
 
-        let res = match body {
+        let result = match req.body {
             anyhttp::RequestBody::Empty => ur.call(),
             anyhttp::RequestBody::Bytes(bytes) => ur.send_bytes(&bytes),
             anyhttp::RequestBody::Read(r) => ur.send(r),
         };
 
-        match res {
-            Ok(res) => {
-                let uri = res
-                    .get_url()
-                    .parse::<http::Uri>()
-                    .map_err(|err| HttpError::new_http(err.into()))?;
-
-                let mut builder = http::response::Response::builder().status(res.status());
-                for header in res.headers_names() {
-                    if let Some(value) = res.header(&header) {
-                        builder = builder.header(&header, value);
-                    }
-                }
-
-                let (parts, _) = builder.body(()).unwrap().into_parts();
-                let body = GenericResponseBody::Read(Box::new(res.into_reader()));
-                let mut fres = anyhttp::Response::from_parts(parts, body);
-                *fres.uri_mut() = uri;
-                Ok(fres)
-            }
+        let ures = match result {
+            Ok(r) => r,
             Err(err) => {
                 // FIXME: better mapping
-                Err(HttpError::new_custom(err.to_string()))
+                return Err(HttpError::new_custom(err.to_string()));
+            }
+        };
+
+        let uri = ures
+            .get_url()
+            .parse::<http::Uri>()
+            .map_err(|err| HttpError::new_http(err.into()))?;
+
+        let status = http::StatusCode::from_u16(ures.status())
+            .map_err(|err| HttpError::new_http(err.into()))?;
+
+        let mut headers = http::HeaderMap::new();
+        for header in ures.headers_names() {
+            if let Some(value_raw) = ures.header(&header) {
+                let key = http::header::HeaderName::from_str(&header)
+                    .map_err(|err| HttpError::new_http(err.into()))?;
+
+                let value = value_raw
+                    .parse::<HeaderValue>()
+                    .map_err(|err| HttpError::new_http(err.into()))?;
+                headers.append(key, value);
             }
         }
+
+        let body = GenericResponseBody::Read(Box::new(ures.into_reader()));
+
+        let mut res = anyhttp::Response {
+            uri: Some(uri),
+            status,
+            version: http::Version::HTTP_11,
+            headers,
+            extensions: Default::default(),
+            body: (),
+        };
+        if let Some(tap) = tap {
+            tap(&mut res)
+        }
+
+        let final_res = res.map_body(|_| body);
+        Ok(final_res)
     }
 }
 

@@ -42,26 +42,26 @@ struct DynWrapper<E>(E);
 pub type DynResponseBody =
     Box<dyn Respond<BytesOutput = HttpFuture<'static, Vec<u8>>, Chunks = DynChunksStream> + Send>;
 
-impl Respond for DynResponseBody {
-    type Chunks = DynChunksStream;
-    type BytesOutput = HttpFuture<'static, Vec<u8>>;
+// impl Respond for DynResponseBody {
+//     type Chunks = DynChunksStream;
+//     type BytesOutput = HttpFuture<'static, Vec<u8>>;
 
-    fn into_chunks(self) -> Self::Chunks {
-        self.into_chunks_boxed()
-    }
+//     fn into_chunks(self) -> Self::Chunks {
+//         self.into_chunks_boxed()
+//     }
 
-    fn into_chunks_boxed(self: Box<Self>) -> Self::Chunks {
-        self.into_chunks()
-    }
+//     fn into_chunks_boxed(self: Box<Self>) -> Self::Chunks {
+//         self.into_chunks()
+//     }
 
-    fn bytes(self) -> Self::BytesOutput {
-        self.bytes_boxed()
-    }
+//     fn bytes(self) -> Self::BytesOutput {
+//         self.bytes_boxed()
+//     }
 
-    fn bytes_boxed(self: Box<Self>) -> Self::BytesOutput {
-        self.bytes()
-    }
-}
+//     fn bytes_boxed(self: Box<Self>) -> Self::BytesOutput {
+//         self.bytes()
+//     }
+// }
 
 impl<E> HttpExecutor for DynWrapper<E>
 where
@@ -87,7 +87,7 @@ where
             .0
             .execute_generic(request)
             .and_then(move |res| async move {
-                let res = res.map(move |b| -> DynResponseBody { Box::new(ResponseWrap(b)) });
+                let res = res.map_body(move |b| -> DynResponseBody { Box::new(ResponseWrap(b)) });
                 Ok(res)
             });
 
@@ -135,7 +135,7 @@ where
     <B as Respond>::Chunks: Future<Output = Result<Vec<u8>, HttpError>> + Send + 'static,
 {
     pub async fn bytes_async(self) -> Result<Vec<u8>, HttpError> {
-        self.into_body().bytes().await
+        self.body.bytes().await
     }
 
     #[cfg(feature = "json")]
