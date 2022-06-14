@@ -13,6 +13,7 @@ pub enum GenericResponseBody {
 impl Respond for GenericResponseBody {
     type Chunks = Result<Vec<u8>, HttpError>;
     type BytesOutput = Result<Vec<u8>, HttpError>;
+    type Reader = Box<dyn std::io::Read>;
 
     fn into_chunks(self) -> Self::Chunks {
         match self {
@@ -39,19 +40,37 @@ impl Respond for GenericResponseBody {
     fn bytes_boxed(self: Box<Self>) -> Self::BytesOutput {
         (*self).bytes()
     }
+
+    fn reader(self) -> Self::Reader {
+        match self {
+            GenericResponseBody::Read(r) => r,
+        }
+    }
+
+    fn reader_boxed(self: Box<Self>) -> Self::Reader {
+        (*self).reader()
+    }
 }
 
 struct DynWrapper<E>(E);
 
-pub type DynResponseBody =
-    Box<dyn Respond<Chunks = Result<Vec<u8>, HttpError>, BytesOutput = Result<Vec<u8>, HttpError>>>;
+pub type DynResponseBody = Box<
+    dyn Respond<
+        Chunks = Result<Vec<u8>, HttpError>,
+        BytesOutput = Result<Vec<u8>, HttpError>,
+        Reader = Box<dyn std::io::Read>,
+    >,
+>;
 
 impl<E> HttpExecutor for DynWrapper<E>
 where
     E: HttpExecutor,
     E::Output: Into<Result<Response<E::ResponseBody>, HttpError>>,
-    E::ResponseBody:
-        Respond<Chunks = Result<Vec<u8>, HttpError>, BytesOutput = Result<Vec<u8>, HttpError>>,
+    E::ResponseBody: Respond<
+        Chunks = Result<Vec<u8>, HttpError>,
+        BytesOutput = Result<Vec<u8>, HttpError>,
+        Reader = Box<dyn std::io::Read>,
+    >,
 {
     type RequestBody = RequestBody;
     type ResponseBody = DynResponseBody;
@@ -89,8 +108,11 @@ pub type DynClient = super::Client<DynExecutor>;
 impl<E> super::Client<E>
 where
     E: HttpExecutor + 'static,
-    E::ResponseBody:
-        Respond<Chunks = Result<Vec<u8>, HttpError>, BytesOutput = Result<Vec<u8>, HttpError>>,
+    E::ResponseBody: Respond<
+        Chunks = Result<Vec<u8>, HttpError>,
+        BytesOutput = Result<Vec<u8>, HttpError>,
+        Reader = Box<dyn std::io::Read>,
+    >,
     E::Output: Into<Result<Response<E::ResponseBody>, HttpError>>,
 {
     pub fn new_dyn_sync(exec: E) -> super::Client<DynExecutor> {

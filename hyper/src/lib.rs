@@ -32,6 +32,7 @@ pub struct ResponseBody(pub hyper::Body);
 impl anyhttp::Respond for ResponseBody {
     type Chunks = DynChunksStream;
     type BytesOutput = BoxFuture<'static, Result<Vec<u8>, anyhttp::HttpError>>;
+    type Reader = Box<dyn std::io::Read>;
 
     fn into_chunks(self) -> Self::Chunks {
         let s = self.0.map_ok(|b| b.to_vec()).map_err(|err| {
@@ -57,6 +58,14 @@ impl anyhttp::Respond for ResponseBody {
 
     fn bytes_boxed(self: Box<Self>) -> Self::BytesOutput {
         self.bytes()
+    }
+
+    fn reader(self) -> Self::Reader {
+        todo!()
+    }
+
+    fn reader_boxed(self: Box<Self>) -> Self::Reader {
+        todo!()
     }
 }
 

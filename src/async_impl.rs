@@ -9,6 +9,8 @@ pub type HttpFuture<'a, T> = BoxFuture<'a, Result<T, HttpError>>;
 
 pub type DynChunksStream = BoxStream<'static, Result<Vec<u8>, HttpError>>;
 
+pub type DynReader = Pin<Box<dyn futures::io::AsyncRead + Send>>;
+
 struct ResponseWrap<R>(R);
 
 impl<R> Respond for ResponseWrap<R>
@@ -16,9 +18,11 @@ where
     R: Respond,
     <R as Respond>::BytesOutput: Future<Output = Result<Vec<u8>, HttpError>> + Send + 'static,
     <R as Respond>::Chunks: Stream<Item = Result<Vec<u8>, HttpError>> + Send + 'static,
+    <R as Respond>::Reader: futures::io::AsyncRead + Send + 'static,
 {
     type Chunks = DynChunksStream;
     type BytesOutput = HttpFuture<'static, Vec<u8>>;
+    type Reader = DynReader;
 
     fn into_chunks(self) -> Self::Chunks {
         Box::pin(self.0.into_chunks())
@@ -35,12 +39,25 @@ where
     fn bytes_boxed(self: Box<Self>) -> Self::BytesOutput {
         Box::pin(self.0.bytes())
     }
+
+    fn reader(self) -> Self::Reader {
+        Box::pin(self.0.reader())
+    }
+
+    fn reader_boxed(self: Box<Self>) -> Self::Reader {
+        self.reader()
+    }
 }
 
 struct DynWrapper<E>(E);
 
-pub type DynResponseBody =
-    Box<dyn Respond<BytesOutput = HttpFuture<'static, Vec<u8>>, Chunks = DynChunksStream> + Send>;
+pub type DynResponseBody = Box<
+    dyn Respond<
+            BytesOutput = HttpFuture<'static, Vec<u8>>,
+            Chunks = DynChunksStream,
+            Reader = Pin<Box<dyn futures::io::AsyncRead + Send>>,
+        > + Send,
+>;
 
 // impl Respond for DynResponseBody {
 //     type Chunks = DynChunksStream;
@@ -71,6 +88,7 @@ where
         Future<Output = Result<Vec<u8>, HttpError>> + Send + 'static,
     <E::ResponseBody as Respond>::Chunks:
         Stream<Item = Result<Vec<u8>, HttpError>> + Send + 'static,
+    <E::ResponseBody as Respond>::Reader: futures::io::AsyncRead + Send + 'static,
     E::Output:
         std::future::Future<Output = Result<Response<E::ResponseBody>, HttpError>> + Send + 'static,
 {
@@ -119,6 +137,7 @@ where
         Future<Output = Result<Vec<u8>, HttpError>> + Send + 'static,
     <E::ResponseBody as Respond>::Chunks:
         Stream<Item = Result<Vec<u8>, HttpError>> + Send + 'static,
+    <E::ResponseBody as Respond>::Reader: futures::io::AsyncRead + Send + 'static,
     E::Output:
         std::future::Future<Output = Result<Response<E::ResponseBody>, HttpError>> + Send + 'static,
 {

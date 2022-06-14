@@ -33,18 +33,22 @@ pub use self::async_impl::{
 pub trait Respond: 'static {
     type Chunks;
     type BytesOutput;
+    type Reader;
 
     fn into_chunks(self) -> Self::Chunks;
     fn into_chunks_boxed(self: Box<Self>) -> Self::Chunks;
 
     fn bytes(self) -> Self::BytesOutput;
     fn bytes_boxed(self: Box<Self>) -> Self::BytesOutput;
+
+    fn reader(self) -> Self::Reader;
+    fn reader_boxed(self: Box<Self>) -> Self::Reader;
 }
 
 impl<R: Respond + ?Sized> Respond for Box<R> {
     type Chunks = R::Chunks;
-
     type BytesOutput = R::BytesOutput;
+    type Reader = R::Reader;
 
     fn into_chunks(self) -> Self::Chunks {
         self.into_chunks_boxed()
@@ -60,6 +64,14 @@ impl<R: Respond + ?Sized> Respond for Box<R> {
 
     fn bytes_boxed(self: Box<Self>) -> Self::BytesOutput {
         R::bytes_boxed(*self)
+    }
+
+    fn reader(self) -> Self::Reader {
+        self.reader_boxed()
+    }
+
+    fn reader_boxed(self: Box<Self>) -> Self::Reader {
+        R::reader_boxed(*self)
     }
 }
 
