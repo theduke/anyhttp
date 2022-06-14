@@ -27,6 +27,14 @@ impl HttpError {
         }
     }
 
+    pub fn new_io(error: std::io::Error, message: Option<String>) -> Self {
+        Self {
+            kind: Kind::Io,
+            cause: Some(Box::new(error)),
+            message,
+        }
+    }
+
     pub fn new_http(error: http::Error) -> Self {
         Self {
             kind: Kind::Http,
@@ -102,6 +110,10 @@ impl std::fmt::Display for HttpError {
                 write!(f, "could not deserialize JSON response")?;
                 true
             }
+            Kind::Io => {
+                write!(f, "io error")?;
+                true
+            }
         };
 
         let prefix = if let Some(msg) = &self.message {
@@ -145,5 +157,6 @@ pub(crate) enum Kind {
     NonSuccessStatus(http::StatusCode),
     ResponseRead,
     Http,
+    Io,
     Other,
 }
