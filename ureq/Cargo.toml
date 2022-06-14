@@ -1,0 +1,15 @@
+[package]
+name = "anyhttp_ureq"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhttp = { version = "0.1", path = "../", features = ["sync"] }
+http = "0.2.8"
+ureq = "2.4.0"
+
+[dev-dependencies]
+anyhttp = { version = "0.1.0", path = "../", default-features = false, features = ["test", "json",
+"sync", "async", "base64"] }
