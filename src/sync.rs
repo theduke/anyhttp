@@ -155,7 +155,7 @@ where
 
 impl<B> Response<B>
 where
-    B: Respond<Chunks = Result<Vec<u8>, HttpError>, BytesOutput = Result<Vec<u8>, HttpError>>,
+    B: Respond<BytesOutput = Result<Vec<u8>, HttpError>>,
 {
     pub fn bytes_sync(self) -> Result<Vec<u8>, HttpError> {
         self.body.bytes()
