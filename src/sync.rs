@@ -6,6 +6,42 @@ use crate::{
     HttpExecutor, RequestBody, RequestPre, Respond,
 };
 
+pub enum GenericResponseBody {
+    Read(Box<dyn std::io::Read>),
+}
+
+impl Respond for GenericResponseBody {
+    type Chunks = Result<Vec<u8>, HttpError>;
+    type BytesOutput = Result<Vec<u8>, HttpError>;
+
+    fn into_chunks(self) -> Self::Chunks {
+        match self {
+            GenericResponseBody::Read(mut r) => {
+                let mut buf = Vec::new();
+
+                r.read_to_end(&mut buf).map_err(|err| HttpError::new_io(
+                    err,
+                    Some("could not read response body".to_string()),
+                ))?;
+
+                Ok(buf)
+            }
+        }
+    }
+
+    fn into_chunks_boxed(self: Box<Self>) -> Self::Chunks {
+        (*self).into_chunks()
+    }
+
+    fn bytes(self) -> Self::BytesOutput {
+        self.into_chunks()
+    }
+
+    fn bytes_boxed(self: Box<Self>) -> Self::BytesOutput {
+        (*self).bytes()
+    }
+}
+
 struct DynWrapper<E>(E);
 
 pub type DynResponseBody =
