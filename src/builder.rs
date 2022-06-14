@@ -57,6 +57,10 @@ impl<E: HttpExecutor + Sized> RequestBuilder<E> {
         self
     }
 
+    pub fn uri_mut(&mut self) -> Option<&mut Uri> {
+        self.result.as_mut().ok().map(|p| p.request.uri_mut())
+    }
+
     pub fn header_sensitive<K, V>(mut self, key: K, value: V, is_sensitive: bool) -> Self
     where
         HeaderName: TryFrom<K>,
