@@ -106,11 +106,17 @@ impl HttpExecutor for UreqExecutor {
 
 #[cfg(test)]
 mod tests {
+    use anyhttp::Client;
+
     use super::*;
 
     #[test]
     fn test_ureq_client() {
         let exec = UreqExecutor::new();
+
+        // Ensure client works as dynamic.
+        let _dyn = Client::new_dyn_sync(exec.clone());
+
         anyhttp::test::test_sync_executor(exec);
     }
 }

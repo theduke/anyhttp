@@ -11,11 +11,21 @@ pub enum GenericResponseBody {
 }
 
 impl Respond for GenericResponseBody {
-    type Chunks = Result<Vec<u8>, HttpError>;
+    type Chunks = Box<dyn Iterator<Item = Result<Vec<u8>, HttpError>>>;
     type BytesOutput = Result<Vec<u8>, HttpError>;
     type Reader = Box<dyn std::io::Read>;
 
     fn into_chunks(self) -> Self::Chunks {
+        // FIXME: proper implemenetation
+        let bytes = self.bytes();
+        Box::new(Some(bytes).into_iter())
+    }
+
+    fn into_chunks_boxed(self: Box<Self>) -> Self::Chunks {
+        (*self).into_chunks()
+    }
+
+    fn bytes(self) -> Self::BytesOutput {
         match self {
             GenericResponseBody::Read(mut r) => {
                 let mut buf = Vec::new();
@@ -27,14 +37,6 @@ impl Respond for GenericResponseBody {
                 Ok(buf)
             }
         }
-    }
-
-    fn into_chunks_boxed(self: Box<Self>) -> Self::Chunks {
-        (*self).into_chunks()
-    }
-
-    fn bytes(self) -> Self::BytesOutput {
-        self.into_chunks()
     }
 
     fn bytes_boxed(self: Box<Self>) -> Self::BytesOutput {
