@@ -1,3 +1,5 @@
+use http::StatusCode;
+
 #[derive(Debug)]
 pub struct HttpError {
     kind: Kind,
@@ -74,6 +76,21 @@ impl HttpError {
             kind: Kind::Other,
             cause: Some(Box::new(cause)),
             message: Some(message.into()),
+        }
+    }
+
+    pub fn as_status(&self) -> Option<StatusCode> {
+        match self.kind {
+            Kind::NonSuccessStatus(s) => Some(s),
+            _ => None,
+        }
+    }
+
+    pub fn is_not_found(&self) -> bool {
+        if let Some(s) = self.as_status() {
+            s == StatusCode::NOT_FOUND
+        } else {
+            false
         }
     }
 }
